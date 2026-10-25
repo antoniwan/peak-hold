@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Peak Hold</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Peak Hold</h1>
+    <span class="status" id="status" data-state="idle">Starting…</span>
+  </header>
+
+  <section class="panel" aria-label="Loudest sound">
+    <div class="readout">
+      <span class="label">Loudest so far</span>
+      <div class="peak" id="peak" aria-live="polite"><span class="num" id="peakNum">--.-</span><span class="unit">dB</span></div>
+      <p class="compare" id="compare">Waiting for sound.</p>
+      <div class="meta">
+        <span class="chip" id="zone" hidden></span>
+        <span id="when"></span>
+      </div>
+      <div class="actions">
+        <button type="button" id="reset">Reset peak</button>
+        <span class="now">Now <b id="nowNum">--</b> dB · <kbd>R</kbd> also resets</span>
+      </div>
+    </div>
+
+    <div class="meter-box" aria-hidden="true">
+      <div class="scale" id="scale"></div>
+      <div class="meter">
+        <div class="fill" id="fill"></div>
+        <div class="hold" id="hold" hidden></div>
+      </div>
+    </div>
+
+    <div class="gate" id="gate" hidden>
+      <p id="gateMsg"></p>
+    </div>
+  </section>
+
+  <section class="history" aria-label="Last 30 seconds">
+    <div class="history-head">
+      <span class="label">Last 30 seconds</span>
+      <span class="legend"><span><i></i>Level</span><span><i class="dash"></i>Peak hold</span></span>
+    </div>
+    <canvas id="hist"></canvas>
+  </section>
+
+  <footer>
+    <label for="offset">Calibration offset <input id="offset" type="number" step="1" value="94"> dB</label>
+    <p>A computer mic reports level relative to its own maximum, not true sound pressure. The offset turns that into an estimated dB SPL. If you have a real meter, tune the offset until the readings match.</p>
+    <p>Closing this window keeps Peak Hold running in the tray, where you can reset the peak or quit.</p>
+  </footer>
+</div>
+<script src="main.js"></script>
+</body>
+</html>

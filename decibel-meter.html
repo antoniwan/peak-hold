@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Peak Hold Meter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@400;600&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one instrument panel (peak readout + vertical meter), a 30 s history strip below, calibration in the footer */
+:root{
+  --bg:#eef1f2; --surface:#ffffff; --fg:#14201f; --muted:#5b6b6a; --line:#d5dcdc;
+  --accent:#0b7a75; --accent-fg:#ffffff;
+  --ok:#3f9b4f; --warn:#c98a12; --danger:#d1432e;
+  --font-body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-num:"Chivo Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0f1615; --surface:#172120; --fg:#e6efed; --muted:#8fa3a0; --line:#2a3836;
+    --accent:#3cc7bd; --accent-fg:#06211f;
+    --ok:#5cc46c; --warn:#e7ad3a; --danger:#f0654f;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg); color:var(--fg); font:15px/1.5 var(--font-body);
+  min-height:100vh;
+  padding-block:24px 32px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap{max-width:820px; margin:0 auto; display:grid; gap:16px}
+header{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
+h1{margin:0; font-size:18px; font-weight:600; letter-spacing:.01em}
+.status{display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--muted)}
+.status::before{content:""; width:8px; height:8px; border-radius:50%; background:var(--muted)}
+.status[data-state="live"]::before{background:var(--ok); box-shadow:0 0 0 4px color-mix(in srgb, var(--ok) 25%, transparent)}
+.status[data-state="error"]::before{background:var(--danger)}
+
+.panel{
+  position:relative; background:var(--surface); border:1px solid var(--line); border-radius:14px;
+  display:grid; grid-template-columns:minmax(0,1fr) auto; gap:24px; padding:24px;
+}
+.label{font-size:12px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--muted)}
+.readout{display:grid; align-content:start; gap:10px; min-width:0}
+.peak{display:flex; align-items:baseline; gap:10px; font-family:var(--font-num); font-variant-numeric:tabular-nums; line-height:1}
+.peak .num{font-size:clamp(64px, 17vw, 136px); font-weight:600; letter-spacing:-.04em}
+.peak .unit{font-size:clamp(20px, 4vw, 30px); color:var(--muted)}
+.peak.bump .num{animation:bump .35s ease-out}
+@keyframes bump{from{color:var(--accent)}to{color:var(--fg)}}
+.compare{margin:0; font-size:16px}
+.meta{display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; font-size:13px; color:var(--muted)}
+.chip{font-size:12px; font-weight:600; padding:2px 10px; border-radius:999px; border:1px solid currentColor}
+.chip[data-zone="ok"]{color:var(--ok)}
+.chip[data-zone="warn"]{color:var(--warn)}
+.chip[data-zone="danger"]{color:var(--danger)}
+.actions{display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin-top:8px}
+button{
+  font:600 15px/1 var(--font-body); cursor:pointer; border-radius:10px;
+  padding:14px 22px; border:0; background:var(--accent); color:var(--accent-fg);
+}
+button:hover{filter:brightness(1.08)}
+button:focus-visible, input:focus-visible{outline:3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset:2px}
+.now{font-family:var(--font-num); font-variant-numeric:tabular-nums; font-size:14px; color:var(--muted)}
+.now b{color:var(--fg); font-weight:600}
+kbd{font-family:var(--font-num); font-size:12px; border:1px solid var(--line); border-radius:4px; padding:0 5px}
+
+.meter-box{display:flex; gap:8px; height:280px}
+.scale{position:relative; width:30px; font-family:var(--font-num); font-size:11px; color:var(--muted)}
+.scale span{position:absolute; right:0; transform:translateY(50%)}
+.meter{position:relative; width:44px; height:100%; border-radius:8px; background:color-mix(in srgb, var(--line) 70%, transparent); overflow:visible}
+.meter .fill{position:absolute; left:0; right:0; bottom:0; height:0; border-radius:8px; background:var(--ok); transition:height 60ms linear}
+.meter .hold{position:absolute; left:-6px; right:-6px; bottom:0; height:3px; border-radius:2px; background:var(--accent); transform:translateY(50%)}
+.meter .hold[hidden]{display:none!important}
+
+.history{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px 16px 10px; display:grid; gap:8px}
+.history-head{display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap}
+.legend{display:flex; gap:14px; font-size:12px; color:var(--muted)}
+.legend i{display:inline-block; width:14px; height:0; border-top:2px solid var(--fg); vertical-align:middle; margin-right:6px}
+.legend i.dash{border-top:2px dashed var(--accent)}
+canvas{display:block; width:100%; height:180px}
+
+footer{display:grid; gap:6px; font-size:13px; color:var(--muted); max-width:65ch}
+footer label{display:flex; align-items:center; gap:10px; color:var(--fg)}
+footer input{width:76px; font:14px var(--font-num); padding:6px 8px; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--fg)}
+footer p{margin:0}
+
+.gate{
+  position:absolute; inset:0; border-radius:14px; display:grid; place-content:center; justify-items:center; gap:14px;
+  padding:24px; text-align:center; background:color-mix(in srgb, var(--surface) 92%, transparent);
+}
+.gate p{margin:0; max-width:40ch}
+[hidden]{display:none!important}
+
+@media (max-width:520px){
+  .panel{gap:16px; padding:18px}
+  .meter-box{height:220px}
+  .meter{width:32px}
+}
+@media (prefers-reduced-motion:reduce){
+  .peak.bump .num{animation:none}
+  .meter .fill{transition:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Peak Hold Meter</h1>
+    <span class="status" id="status" data-state="idle">Starting…</span>
+  </header>
+
+  <section class="panel" aria-label="Loudest sound">
+    <div class="readout">
+      <span class="label">Loudest so far</span>
+      <div class="peak" id="peak" aria-live="polite"><span class="num" id="peakNum">--.-</span><span class="unit">dB</span></div>
+      <p class="compare" id="compare">Waiting for sound.</p>
+      <div class="meta">
+        <span class="chip" id="zone" hidden></span>
+        <span id="when"></span>
+      </div>
+      <div class="actions">
+        <button type="button" id="reset">Reset peak</button>
+        <span class="now">Now <b id="nowNum">--</b> dB · <kbd>R</kbd> also resets</span>
+      </div>
+    </div>
+
+    <div class="meter-box" aria-hidden="true">
+      <div class="scale" id="scale"></div>
+      <div class="meter">
+        <div class="fill" id="fill"></div>
+        <div class="hold" id="hold" hidden></div>
+      </div>
+    </div>
+
+    <div class="gate" id="gate" hidden>
+      <p id="gateMsg">Click to start listening.</p>
+      <button type="button" id="gateBtn">Start listening</button>
+    </div>
+  </section>
+
+  <section class="history" aria-label="Last 30 seconds">
+    <div class="history-head">
+      <span class="label">Last 30 seconds</span>
+      <span class="legend"><span><i></i>Level</span><span><i class="dash"></i>Peak hold</span></span>
+    </div>
+    <canvas id="hist"></canvas>
+  </section>
+
+  <footer>
+    <label for="offset">Calibration offset <input id="offset" type="number" step="1" value="94"> dB</label>
+    <p>A browser mic reports level relative to its own maximum, not true sound pressure. The offset turns that into an estimated dB SPL. If you have a real meter, tune the offset until the readings match.</p>
+  </footer>
+</div>
+
+<script>
+const RANGE_MIN = 20, RANGE_MAX = 120, HISTORY_MS = 30000, WARMUP_MS = 600;
+const REFS = [
+  [35, "a quiet room at night"], [50, "a library or quiet office"], [65, "normal conversation"],
+  [75, "a busy restaurant"], [85, "heavy traffic"], [95, "a lawn mower"], [105, "a motorcycle"],
+  [115, "a rock concert"], [Infinity, "a thunderclap, near the threshold of pain"]
+];
+const $ = id => document.getElementById(id);
+
+let ctx, analyser, buf, running = false, startedAt = 0;
+let offset = 94;
+let peakFs = -Infinity, peakAt = null; // peak is kept in dBFS so a calibration change shifts it with everything else
+let smooth = null;
+const history = []; // [time, dBFS]
+
+const clampDb = db => Math.min(RANGE_MAX, Math.max(RANGE_MIN, db));
+const pct = db => (clampDb(db) - RANGE_MIN) / (RANGE_MAX - RANGE_MIN) * 100;
+const zoneOf = db => db < 70 ? "ok" : db < 85 ? "warn" : "danger";
+const zoneText = { ok: "Comfortable", warn: "Loud", danger: "Hearing risk with long exposure" };
+const describe = db => "About as loud as " + REFS.find(([max]) => db < max)[1] + ".";
+
+function setStatus(text, state) { const s = $("status"); s.textContent = text; s.dataset.state = state; }
+function showGate(msg, label) { $("gateMsg").textContent = msg; $("gateBtn").textContent = label; $("gate").hidden = false; }
+
+// Meter scale labels
+for (let db = RANGE_MIN; db <= RANGE_MAX; db += 20) {
+  const s = document.createElement("span");
+  s.textContent = db;
+  s.style.bottom = pct(db) + "%";
+  $("scale").appendChild(s);
+}
+
+async function start() {
+  $("gate").hidden = true;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setStatus("No mic access", "error");
+    return showGate("This browser can't reach the microphone from this page. Open it in Chrome, Edge or Firefox.", "Try again");
+  }
+  setStatus("Asking for the mic…", "idle");
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+  } catch (e) {
+    setStatus("Mic blocked", "error");
+    const msg = e.name === "NotAllowedError" ? "Microphone access was blocked. Allow it from the icon in the address bar, then try again."
+      : e.name === "NotFoundError" ? "No microphone was found. Plug one in, then try again."
+      : "The microphone couldn't be opened (" + e.name + ").";
+    return showGate(msg, "Try again");
+  }
+  ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  buf = new Float32Array(analyser.fftSize);
+  ctx.createMediaStreamSource(stream).connect(analyser);
+  if (ctx.state !== "running") { try { await ctx.resume(); } catch {} }
+  if (ctx.state !== "running") {
+    setStatus("Paused", "idle");
+    return showGate("The mic is ready. Click once so the browser lets the page listen.", "Start listening");
+  }
+  begin();
+}
+
+function begin() {
+  $("gate").hidden = true;
+  setStatus("Listening", "live");
+  if (running) return;
+  running = true;
+  startedAt = performance.now();
+  requestAnimationFrame(tick);
+}
+
+$("gateBtn").addEventListener("click", async () => {
+  if (!analyser) return start();
+  try { await ctx.resume(); } catch {}
+  if (ctx.state === "running") begin();
+});
+
+function resetPeak() {
+  peakFs = -Infinity;
+  peakAt = null;
+  startedAt = performance.now();
+  renderPeak();
+}
+$("reset").addEventListener("click", resetPeak);
+document.addEventListener("keydown", e => {
+  if ((e.key === "r" || e.key === "R") && !e.ctrlKey && !e.metaKey && e.target.tagName !== "INPUT") resetPeak();
+});
+$("offset").addEventListener("input", e => {
+  const v = parseFloat(e.target.value);
+  if (Number.isFinite(v)) { offset = v; renderPeak(); }
+});
+
+function renderPeak() {
+  const has = Number.isFinite(peakFs);
+  const db = Math.max(0, peakFs + offset);
+  $("peakNum").textContent = has ? db.toFixed(1) : "--.-";
+  $("compare").textContent = has ? describe(db) : "Waiting for sound.";
+  const zone = $("zone");
+  zone.hidden = !has;
+  if (has) { zone.dataset.zone = zoneOf(db); zone.textContent = zoneText[zoneOf(db)]; }
+  $("hold").hidden = !has;
+  if (has) $("hold").style.bottom = pct(db) + "%";
+  renderWhen();
+}
+
+function renderWhen() {
+  if (!peakAt) { $("when").textContent = ""; return; }
+  const secs = Math.round((Date.now() - peakAt) / 1000);
+  const ago = secs < 2 ? "just now" : secs < 60 ? secs + " s ago" : Math.floor(secs / 60) + " min ago";
+  $("when").textContent = "Captured " + new Date(peakAt).toLocaleTimeString() + " · " + ago;
+}
+
+function bump() {
+  const p = $("peak");
+  p.classList.remove("bump");
+  void p.offsetWidth;
+  p.classList.add("bump");
+}
+
+function tick(now) {
+  analyser.getFloatTimeDomainData(buf);
+  let sum = 0;
+  for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+  const fs = 20 * Math.log10(Math.sqrt(sum / buf.length) || 1e-10);
+
+  history.push([now, fs]);
+  while (history.length && now - history[0][0] > HISTORY_MS) history.shift();
+
+  if (now - startedAt > WARMUP_MS && fs > peakFs) {
+    const wasNew = !Number.isFinite(peakFs) || fs - peakFs > 0.5;
+    peakFs = fs;
+    peakAt = Date.now();
+    renderPeak();
+    if (wasNew) bump();
+  }
+
+  smooth = smooth == null ? fs : smooth + (fs - smooth) * 0.3;
+  const nowDb = Math.max(0, smooth + offset);
+  $("nowNum").textContent = nowDb.toFixed(0);
+  const fill = $("fill");
+  fill.style.height = pct(nowDb) + "%";
+  fill.style.background = "var(--" + zoneOf(nowDb) + ")";
+
+  renderWhen();
+  draw(now);
+  requestAnimationFrame(tick);
+}
+
+let colors = {};
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ["fg", "muted", "line", "accent"]) colors[k] = cs.getPropertyValue("--" + k).trim();
+}
+readColors();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors);
+
+function draw(now) {
+  const c = $("hist"), dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) {
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+  }
+  const g = c.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+
+  const padL = 30, padR = 6, padT = 8, padB = 20;
+  const pw = w - padL - padR, ph = h - padT - padB;
+  const x = t => padL + (1 - (now - t) / HISTORY_MS) * pw;
+  const y = db => padT + (1 - (clampDb(db) - RANGE_MIN) / (RANGE_MAX - RANGE_MIN)) * ph;
+
+  g.font = "11px " + getComputedStyle(document.body).getPropertyValue("--font-num");
+  g.textBaseline = "middle";
+  g.lineWidth = 1;
+  for (let db = RANGE_MIN; db <= RANGE_MAX; db += 20) {
+    g.strokeStyle = colors.line;
+    g.beginPath(); g.moveTo(padL, Math.round(y(db)) + .5); g.lineTo(w - padR, Math.round(y(db)) + .5); g.stroke();
+    g.fillStyle = colors.muted; g.textAlign = "right";
+    g.fillText(db, padL - 6, y(db));
+  }
+  g.textBaseline = "alphabetic";
+  for (const s of [30, 20, 10, 0]) {
+    g.textAlign = s === 30 ? "left" : s === 0 ? "right" : "center";
+    g.fillText(s === 0 ? "now" : "−" + s + " s", padL + (1 - s / 30) * pw, h - 4);
+  }
+
+  if (history.length > 1) {
+    g.beginPath();
+    g.moveTo(x(history[0][0]), y(RANGE_MIN));
+    for (const [t, fs] of history) g.lineTo(x(t), y(fs + offset));
+    g.lineTo(x(history[history.length - 1][0]), y(RANGE_MIN));
+    g.closePath();
+    g.globalAlpha = .12; g.fillStyle = colors.fg; g.fill(); g.globalAlpha = 1;
+
+    g.beginPath();
+    history.forEach(([t, fs], i) => i ? g.lineTo(x(t), y(fs + offset)) : g.moveTo(x(t), y(fs + offset)));
+    g.strokeStyle = colors.fg; g.lineWidth = 1.5; g.lineJoin = "round"; g.stroke();
+  }
+
+  if (Number.isFinite(peakFs)) {
+    const db = Math.max(0, peakFs + offset), py = y(db);
+    g.setLineDash([6, 4]); g.strokeStyle = colors.accent; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(padL, py); g.lineTo(w - padR, py); g.stroke(); g.setLineDash([]);
+    const label = "peak " + db.toFixed(1);
+    g.textAlign = "left"; g.fillStyle = colors.accent; g.font = "600 " + g.font;
+    g.fillText(label, padL + 6, py < padT + 16 ? py + 14 : py - 6);
+  }
+}
+
+draw(performance.now());
+start();
+</script>
+</body>
+</html>

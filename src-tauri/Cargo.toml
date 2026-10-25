@@ -1,0 +1,17 @@
+[package]
+name = "peak-hold"
+version = "0.1.0"
+description = "Desktop decibel meter that holds the loudest sound until you reset it"
+edition = "2021"
+
+[lib]
+name = "peak_hold_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+cpal = "0.16"
