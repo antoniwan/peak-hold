@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Desktop decibel meter that holds the loudest sound until you reset it",
+  "license": "MIT",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",

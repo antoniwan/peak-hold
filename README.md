@@ -51,3 +51,7 @@ The installer lands in `src-tauri/target/release/bundle/` (`.msi` and `.exe` on 
 ```bash
 npx tauri icon app-icon.svg
 ```
+
+## License
+
+[MIT](LICENSE) © 2026 Antonio Rodríguez Martínez

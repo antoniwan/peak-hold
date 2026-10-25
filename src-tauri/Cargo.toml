@@ -3,6 +3,8 @@ name = "peak-hold"
 version = "0.1.0"
 description = "Desktop decibel meter that holds the loudest sound until you reset it"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/antoniwan/peak-hold"
 
 [lib]
 name = "peak_hold_lib"
