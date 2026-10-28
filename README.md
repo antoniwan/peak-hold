@@ -4,6 +4,11 @@ A desktop decibel meter for Windows and macOS. It listens to the default microph
 
 Built with [Tauri 2](https://tauri.app): the window is plain HTML, CSS and JS in `src/`; the microphone is read natively in Rust (`src-tauri/src/audio.rs`, through [cpal](https://github.com/RustAudio/cpal): WASAPI on Windows, Core Audio on macOS).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
+  <img src="docs/screenshot-light.png" alt="Peak Hold window: a peak of 88.9 dB held from a door slam 18 seconds ago, a live level bar at 40 dB, and a 30-second history graph with the dashed peak hold line" width="780">
+</picture>
+
 ## What it shows
 
 - **Loudest so far**: the peak, when it happened, and a rough comparison ("About as loud as a busy restaurant").
@@ -51,6 +56,10 @@ The installer lands in `src-tauri/target/release/bundle/` (`.msi` and `.exe` on 
 ```bash
 npx tauri icon app-icon.svg
 ```
+
+## Screenshots
+
+The images in `docs/` come from `scripts/screenshots.mjs`, which loads the window in a browser with made-up levels (no mic or Rust build needed). After changing the UI, run `npx -y playwright@1 install chromium` once, then `npm i --no-save playwright && node scripts/screenshots.mjs`.
 
 ## License
 
